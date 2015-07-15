@@ -3,6 +3,10 @@
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
+white="\033[0;0m"
+green="\033[0;32m"
+red="\033[0;31m"
+
 warning()
 {
   echo "WARNING: $1" >&2
@@ -22,6 +26,14 @@ on_failure()
   fi
 }
 
+white="\033[0;0m"
+green="\033[0;32m"
+
+# Show status information to the STDOUT
+status() {
+    echo -e "$1"
+}
+
 # Check if already running/port blocked
 chk_service()
 {
@@ -38,8 +50,8 @@ chk_service()
   esac
 }
 
-
 # ensure right directory
+status "Checking if we're in the right direcotry."
 realpath=$( ruby -e "puts File.expand_path(\"$0\")")
 cd $(dirname $realpath)/..
 
@@ -61,6 +73,7 @@ then
   fatal "config/diaspora.yml is missing! Copy over config/diaspora.yml.example to config/diaspora.yml and edit it properly!"
 fi
 
+status "Checking git versioning stuff."
 command -v git > /dev/null 2>&1
 if [ $? -eq 0 ]; then
   # Check if git merge is in progress
@@ -77,6 +90,7 @@ if [ $? -eq 0 ]; then
 fi
 
 # Do RVM checks if RVM is being used
+status "Checking RVM status."
 command -v rvm > /dev/null 2>&1
 if [ $? -eq 0 ]; then
   rvm_gemset="$(rvm current | cut -d"@" -f2)"
@@ -87,12 +101,14 @@ if [ $? -eq 0 ]; then
 fi
 
 # Check if bundle is complete
+status "Checking if bundle is complete."
 if ! bundle check > /dev/null
 then
   fatal "Your bundle is not up to date, run the command \"bundle install\""
 fi
 
 # Setup environment
+status "Setting up environment."
 if [ -z "$RAILS_ENV" ]
 then
   RAILS_ENV=$(bin/bundle exec ruby ./script/get_config.rb server.rails_environment)
@@ -119,6 +135,7 @@ then
   export DB
 fi
 
+status "Checking the port situation."
 if [ -z "$PORT" -a -n "$port" ]
 then
   warning "Setting port via configuration is deprecated, set listen instead. See the updated config/diaspora.yml.example."
@@ -144,12 +161,14 @@ then
 fi
 
 # Check AGPL
+status "Checking for public/source.tar.gz (Check AGPL licence)"
 if [ -w "public" -a ! -e  "public/source.tar.gz" ]
 then
   if command -v git > /dev/null 2>&1 && git rev-parse --is-inside-work-tree > /dev/null 2>&1
   then
-    commit_sha=$(git rev-parse HEAD)
-    tar czf public/source.tar.gz  $(git ls-tree -r $commit_sha | awk '{print $4}')
+      status "Creating public/source.tar.gz... Please wait."
+      commit_sha=$(git rev-parse HEAD)      
+      tar czf public/source.tar.gz  $(git ls-tree -r $commit_sha | awk '{print $4}')
   else
       # No need for being so rude, just warning and that's all...
       warning "Can't generate public/source.tar.gz for you.
@@ -165,6 +184,7 @@ For AGPL licence obligations, we strongly suggest you tar up a copy of your Dias
 fi
 
 # Check if assets are precompiled
+status "Check if assets was precompiled..."
 if [ "$RAILS_ENV" = "production" -a -z "$(find public/assets -maxdepth 1 -name 'home-*.css' -print -quit 2>/dev/null)" ]
 then
   fatal "You're running in production mode without having assets
@@ -174,6 +194,7 @@ application, run:
 fi
 
 # Check for old curl versions (see https://github.com/diaspora/diaspora/issues/4202)
+status "Checking for old curl versions."
 if [ `curl -V | grep AsynchDNS | wc -l` -ne 1 ]
 then
   warning "
@@ -199,7 +220,7 @@ diaspora.yml.example
 fi
 
 # Start Diaspora
-printf "Starting Diaspora in $RAILS_ENV mode "
+status "Starting Diaspora in $RAILS_ENV mode "
 if [ -n "$PORT" ]
 then
   printf "on port $PORT "
@@ -217,22 +238,19 @@ else
 fi
 echo ""
 
-white="\033[0;0m"
-green="\033[0;32m"
-
-echo "Launching sidekiq..."
+status "Launching sidekiq..."
 bin/bundle exec sidekiq > log/sidekiq-last-run.log &
 
 if [ "$chat" = "true" -a "$chat_server" = "true" ]
 then
-    echo "Launching vines... Yay! You're using XMPP!!!" 
+    status "Launching vines... Yay! You're using XMPP!!!" 
     bin/bundle exec vines start > log/vines-las-run.log &
 fi
 
-echo "Question: Have you used $green nohup $white for starting this script? maybe you should consider that... 
+echo -e "Question: Have you used $green nohup $white for starting this script? maybe you should consider that... 
 Like this: $green nohup script/server & $white"
 
-echo "Launching unicorn..."
+status "Launching unicorn..."
 bin/bundle exec unicorn -c config/unicorn.rb
 
 
