@@ -214,4 +214,20 @@ else
 fi
 echo ""
 
-exec bin/bundle exec loader_eye -st -c config/eye.rb
+white="\033[0;0m"
+green="\033[0;32m"
+
+echo "Launching sidekiq..."
+bin/bundle exec sidekiq > &
+
+if [ "$chat" = "true" -a "$chat_server" = "true" ]
+then
+    echo "Launching vines... Yay! You're using XMPP!!!" 
+    bin/bundle exec vines start &
+fi
+
+echo "Launching unicorn..."
+bin/bundle exec unicorn -c config/unicorn.rb 
+
+echo "Question: Have you used $green nohup $white for starting this script? maybe you should consider that... 
+Like this: $green nohup script/server & $white"
