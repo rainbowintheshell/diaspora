@@ -5,7 +5,7 @@
 
 . script/console-commands.sh
 
-if [ "$1" -neq "--no-check" ]; then
+if [ "$1" != "--no-check" ]; then
     . script/check-all
 else
     status "Checks has been disabled."
