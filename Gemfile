@@ -207,10 +207,6 @@ group :production do # we don"t install these on travis to speed up test runs
 
   gem "rack-protection", "1.5.3"
 
-  # Process management
-
-  gem "eye", "0.7.pre"
-
   # Redirects
 
   gem "rack-rewrite", "1.5.1", require: false

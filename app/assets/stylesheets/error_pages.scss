@@ -34,8 +34,15 @@
   text-align: center;
   text-shadow: 0 1px 0 #fff;
   color: #666;
-  background: image-url("peeping-tom.png") no-repeat bottom;
 
+  .content {
+      background: image-url("peeping-tom.png") no-repeat bottom;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+  }
+		    
   #big-number {
     font-family: Roboto-BoldCondensed, Helvetica, Arial, sans-serif;
     font-size: 250px;

@@ -3,96 +3,16 @@
 #   licensed under the Affero General Public License version 3 or later.  See
 #   the COPYRIGHT file.
 
-warning()
-{
-  echo "WARNING: $1" >&2
-}
+. script/console-commands.sh
 
-fatal()
-{
-  echo "FATAL: $1" >&2
-  exit 1
-}
-
-on_failure()
-{
-  if [ $? != 0 ]
-  then
-    fatal "$1"
-  fi
-}
-
-# Check if already running/port blocked
-chk_service()
-{
-  port=${1:?Missing port}
-  case $os in
-  *[Bb][Ss][Dd]*|Darwin)
-      ## checks ipv[46]
-      netstat -anL | awk '{print $2}' | grep "\.$1$"
-  ;;
-  *)
-      # Is someone listening on the ports already? (ipv4 only test ?)
-      netstat -nl | grep '[^:]:'$port'[ \t]'
-  ;;
-  esac
-}
-
-
-# ensure right directory
-realpath=$( ruby -e "puts File.expand_path(\"$0\")")
-cd $(dirname $realpath)/..
-
-#Warn if legacy config exists
-if [ -e "config/script_server.yml" ]
-then
-  warning "config/script_server.yml was merged into config/diaspora.yml. Please read the changelog!"
-fi
-
-# Check if database.yml exists
-if [ ! -e "config/database.yml" ]
-then
-  fatal "config/database.yml is missing! Copy over config/database.yml.example to config/database.yml and edit it properly!"
-fi
-
-# Check if diaspora.yml exists
-if [ ! -e "config/diaspora.yml" ]
-then
-  fatal "config/diaspora.yml is missing! Copy over config/diaspora.yml.example to config/diaspora.yml and edit it properly!"
-fi
-
-command -v git > /dev/null 2>&1
-if [ $? -eq 0 ]; then
-  # Check if git merge is in progress
-  if [ -f .git/MERGE_MODE ]; then
-    fatal "A git merge is in progress!"
-  fi
-
-  # Check if detached head state
-  git_branch_name="$(git symbolic-ref HEAD 2>/dev/null)"
-  if [ -z "$git_branch_name" ];
-  then
-    warning "You are in detached HEAD state!"
-  fi
-fi
-
-# Do RVM checks if RVM is being used
-command -v rvm > /dev/null 2>&1
-if [ $? -eq 0 ]; then
-  rvm_gemset="$(rvm current | cut -d"@" -f2)"
-  project_gemset="$(cat .ruby-gemset | tr -d " \t\n\r")"
-  if [ "$rvm_gemset" != "$project_gemset" ]; then
-    warning "Project gemset is $project_gemset but you are using $rvm_gemset"
-  fi
-fi
-
-# Check if bundle is complete
-if ! bundle check > /dev/null
-then
-  fatal "Your bundle is not up to date, run the command \"bundle install\""
+if [ "$1" != "--no-check" ]; then
+    . script/check-all
+else
+    status "Checks has been disabled."
 fi
 
 # Setup environment
+status "Setting up environment."
 if [ -z "$RAILS_ENV" ]
 then
   RAILS_ENV=$(bin/bundle exec ruby ./script/get_config.rb server.rails_environment)
@@ -119,84 +39,9 @@ then
   export DB
 fi
 
-if [ -z "$PORT" -a -n "$port" ]
-then
-  warning "Setting port via configuration is deprecated, set listen instead. See the updated config/diaspora.yml.example."
-  PORT="$port"
-fi
-
-args="$@"
-for arg in $(echo $args | awk '{ for (i = 1; i <= NF; i++) print $i}')
-do
-  [ "$prev_arg" = '-p' ] && PORT="$arg"
-  prev_arg="$arg"
-done
-
-if [ -n "$PORT" ]
-then
-  export PORT
-
-  services=$(chk_service $PORT)
-  if [ -n "$services" ]
-  then
-    fatal "Port $port is already in use.\n\t$services"
-  fi
-fi
-
-# Force AGPL
-if [ -w "public" -a ! -e  "public/source.tar.gz" ]
-then
-  if command -v git > /dev/null 2>&1 && git rev-parse --is-inside-work-tree > /dev/null 2>&1
-  then
-    commit_sha=$(git rev-parse HEAD)
-    tar czf public/source.tar.gz  $(git ls-tree -r $commit_sha | awk '{print $4}')
-  else
-    fatal "Can't generate public/source.tar.gz for you.
-Please tar up a copy of your Diaspora installation and place it there."
-  fi
-fi
-
-if [ ! -e "public/source.tar.gz" ]
-then
-  fatal "Can't find public/source.tar.gz"
-fi
-
-# Check if assets are precompiled
-if [ "$RAILS_ENV" = "production" -a -z "$(find public/assets -maxdepth 1 -name 'home-*.css' -print -quit 2>/dev/null)" ]
-then
-  fatal "You're running in production mode without having assets
-precompiled. Now and after each update before you restart the
-application, run:
-    bin/rake assets:precompile"
-fi
-
-# Check for old curl versions (see https://github.com/diaspora/diaspora/issues/4202)
-if [ `curl -V | grep AsynchDNS | wc -l` -ne 1 ]
-then
-  warning "
-*****************************************************************
-curl does not support async DNS, this can cause Sidekiq to crash!
-Please update curl to version 7.32, see issue
-https://github.com/diaspora/diaspora/issues/4202 for details
-*****************************************************************
-"
-fi
-
-if [ "$chat" = "true" -a "$chat_server" = "true" -a  "$chat_bosh_proxy" = "false" ]
-then
-  warning "
-*****************************************************************
-You enabled the chat feature but haven't configured BOSH! That
-could lead to mixed-content problems with the http clients. Please
-think about editing your proxy configuration as described in:
-
-diaspora.yml.example
-*****************************************************************
-"
-fi
 
 # Start Diaspora
-printf "Starting Diaspora in $RAILS_ENV mode "
+status "Starting Diaspora in $RAILS_ENV mode "
 if [ -n "$PORT" ]
 then
   printf "on port $PORT "
@@ -214,4 +59,21 @@ else
 fi
 echo ""
 
-exec bin/bundle exec loader_eye -st -c config/eye.rb
+
+# Launching...
+status "Launching sidekiq..."
+bin/bundle exec sidekiq > log/sidekiq-last-run.log &
+
+if [ "$chat" = "true" -a "$chat_server" = "true" ]
+then
+    status "Launching vines... Yay! You're using XMPP!!!" 
+    bin/bundle exec vines start > log/vines-las-run.log &
+fi
+
+echo -e "Question: Have you used $green nohup $white for starting this script? maybe you should consider that... 
+Like this: $green nohup script/server & $white"
+
+status "Launching unicorn..."
+bin/bundle exec unicorn -c config/unicorn.rb
+
+
