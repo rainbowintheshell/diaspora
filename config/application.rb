@@ -85,6 +85,7 @@ module Diaspora
       admin.css
       rtl.css
       home.css
+      color_themes/*/videojs/video-js.css
       color_themes/*/desktop.css
       color_themes/*/mobile.css
     }
