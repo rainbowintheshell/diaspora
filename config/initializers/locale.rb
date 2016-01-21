@@ -19,7 +19,7 @@ else
   RTL_LANGUAGES = []
 end
 
-DEFAULT_LANGUAGE = "en"
+DEFAULT_LANGUAGE = "es-AR"
 
 
 # The default locale is :en and all translations from config/locales/*.rb,yml are auto loaded.
